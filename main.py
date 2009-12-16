@@ -122,6 +122,9 @@ class Chunk(db.Model):
   # avoiding extra lookups)
   size = db.IntegerProperty(indexed=False)
 
+  # User emails which reference this chunk.
+  owners = db.StringListProperty(indexed=False)
+
 
 class MainHandler(webapp.RequestHandler):
 
@@ -144,11 +147,6 @@ class ListChunksHandler(webapp.RequestHandler):
   """Return chunks that the server has."""
 
   def get(self):
-    # Note: any authenticated user will do.  Chunks aren't owned by a
-    # user, but the existence of a chunk's name could be information
-    # leakage enough to show it to anybody.  Typically there's only
-    # one user per installation, but if there are multiple, presumably
-    # they trust each other a bit.
     user = get_authed_user(self.request)
     if not user:
       self.error(403)
@@ -162,9 +160,11 @@ class ListChunksHandler(webapp.RequestHandler):
     chunks = chunks.fetch(1000)
 
     self.response.headers['Content-Type'] = 'text/plain'
+    user_email = self.request.get("user_email")
     for chunk in chunks:
-      self.response.out.write("%s %d\n" % (chunk.key().name(),
-                                           chunk.size))
+      if chunk.size is not None and user_email in chunk.owners:
+        self.response.out.write("%s %d\n" % (chunk.key().name(),
+                                             chunk.size))
 
 
 class GetUploadUrlHandler(webapp.RequestHandler):
@@ -224,14 +224,13 @@ class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
     algo_digest = get_param('algo_digest')
 
     effective_user = None
-    claimed_email = get_param("user_email")
-    if claimed_email:
-      claimed_user = UserInfo.get_by_key_name('user:%s' % claimed_email)
+    user_email = get_param("user_email")
+    if user_email:
+      claimed_user = UserInfo.get_by_key_name('user:%s' % user_email)
       if (claimed_user and
           claimed_user.upload_password and
           claimed_user.upload_password == get_param('password')):
         effective_user = claimed_user
-        user_email = claimed_email
       
     if not effective_user:
       error_messages.append("No user or correct 'password' argument.")
@@ -255,12 +254,21 @@ class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
 
     # Upload it
     chunk = Chunk.get_or_insert(key_name=algo_digest)
+    dirty = False
     if chunk.blob:
-      error_messages.append("Already exists.")
-      return
-    chunk.blob = blob_info.key()
-    chunk.size = size
-    chunk.put()
+      blobstore.delete(blob_info.key())
+    else:
+      chunk.blob = blob_info.key()
+      chunk.size = size
+      dirty = True
+
+    # Add owner to this chunk's set of owners.
+    if user_email not in chunk.owners:
+      chunk.owners.append(user_email)
+      dirty = True
+
+    if dirty:
+      chunk.put()
 
   def post(self):
     """Do upload post."""
