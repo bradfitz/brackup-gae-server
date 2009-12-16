@@ -72,9 +72,9 @@ def get_authed_user(request):
   if not claimed_email:
     return None
   user = UserInfo.get_by_key_name('user:%s' % claimed_email)
-  if user and \
-         user.upload_password and \
-         user.upload_password == request.get("password"):
+  if (user and
+      user.upload_password and
+      user.upload_password == request.get("password")):
     return user
   return None
 
@@ -227,9 +227,9 @@ class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
     claimed_email = get_param("user_email")
     if claimed_email:
       claimed_user = UserInfo.get_by_key_name('user:%s' % claimed_email)
-      if claimed_user and \
-             claimed_user.upload_password and \
-             claimed_user.upload_password == get_param('password'):
+      if (claimed_user and
+          claimed_user.upload_password and
+          claimed_user.upload_password == get_param('password')):
         effective_user = claimed_user
         user_email = claimed_email
       
@@ -249,8 +249,8 @@ class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
 
     if size != blob_info.size:
       error_messages.append(
-        "Declared size (%d) doesn't match actual size (%d)." % \
-           (size, blob_info.size))
+        "Declared size (%d) doesn't match actual size (%d)." %
+        (size, blob_info.size))
       return
 
     # Upload it
