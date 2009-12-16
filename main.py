@@ -237,6 +237,9 @@ class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
       error_messages = tuple('error_message=%s' % m for m in error_messages)
       self.redirect('/error?%s' % '&'.join(error_messages))
 
+    # Dummy URL without a handler.  The brackup client just looks at
+    # the text of the "Location" header, but doesn't actually try to
+    # fetch it:
     self.redirect('/success')
 
 def main():
