@@ -64,6 +64,26 @@ def get_user_info():
     return UserInfo.get_or_insert(key_name='user:%s' % user.email())
 
 
+
+def get_authed_user(request):
+  """Gets the user from the 'user_email' and 'password' HTTP fields.
+
+  Not from cookies.
+
+  Returns:
+    UserInfo for user on success, else None.
+  """
+  claimed_email = request.get("user_email")
+  if not claimed_email:
+    return None
+  user = UserInfo.get_by_key_name('user:%s' % claimed_email)
+  if user and \
+         user.upload_password and \
+         user.upload_password == request.get("password"):
+    return user
+  return None
+
+
 class Backup(db.Model):
   """A backup."""
   owner = db.ReferenceProperty(UserInfo, required=True)
@@ -101,10 +121,11 @@ class Chunk(db.Model):
   # "sha1:f1d2d2f924e986ac86fdf7b36c94bcdf32beec15"
 
   # The actual bytes.
-  blob = blobstore.BlobReferenceProperty()
+  blob = blobstore.BlobReferenceProperty(indexed=False)
 
-  # Size.  (redundant; already in the blobinfo)
-  size = db.IntegerProperty()
+  # Size.  (already in the blobinfo, but denormalized for speed,
+  # avoiding extra lookups)
+  size = db.IntegerProperty(indexed=False)
 
 
 class MainHandler(webapp.RequestHandler):
@@ -124,30 +145,50 @@ class MainHandler(webapp.RequestHandler):
         }, debug=True))
 
 
+class ListChunksHandler(webapp.RequestHandler):
+  """Return chunks that the server has."""
+
+  def get(self):
+    # Note: any authenticated user will do.  Chunks aren't owned by a
+    # user, but the existence of a chunk's name could be information
+    # leakage enough to show it to anybody.  Typically there's only
+    # one user per installation, but if there are multiple, presumably
+    # they trust each other a bit.
+    user = get_authed_user(self.request)
+    if not user:
+      self.error(403)
+      return
+
+    chunks = Chunk.all().order('__key__')
+    if self.request.get("start"):
+      chunks = chunks.filter('__key__ >',
+                             db.Key.from_path(Chunk.kind(),
+                                              self.request.get("start")))
+    chunks = chunks.fetch(1000)
+
+    self.response.headers['Content-Type'] = 'text/plain'
+    for chunk in chunks:
+      self.response.out.write("%s %d\n" % (chunk.key().name(),
+                                           chunk.size))
+
+
 class GetUploadUrlHandler(webapp.RequestHandler):
   """Handler to return a URL for a script to get an upload URL."""
 
   def get(self):
-    effective_user = None
-    claimed_email = self.request.get("user_email")
-    if claimed_email:
-      claimed_user = UserInfo.get_by_key_name('user:%s' % claimed_email)
-      if claimed_user and \
-         claimed_user.upload_password and \
-         claimed_user.upload_password == self.request.get("password"):
-        effective_user = claimed_user
-
-    if effective_user:
-      count = 1
-      if self.request.get("count"):
-        count = int(self.request.get("count"))
-      lines = ""
-      for x in range(0, count):
-        lines = lines + blobstore.create_upload_url('/upload') + "\n"
-      self.response.headers['Content-Type'] = 'text/plain'
-      self.response.out.write(lines)
-    else:
+    user = get_authed_user(self.request)
+    if not user:
       self.error(403)
+      return
+
+    count = 1
+    if self.request.get("count"):
+      count = int(self.request.get("count"))
+    lines = ""
+    for x in range(0, count):
+      lines = lines + blobstore.create_upload_url('/upload') + "\n"
+    self.response.headers['Content-Type'] = 'text/plain'
+    self.response.out.write(lines)
 
 
 class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
@@ -249,7 +290,8 @@ def main():
   application = webapp.WSGIApplication(
       [('/', MainHandler),
        ('/get_upload_urls', GetUploadUrlHandler),
-       ('/upload', UploadHandler),  # returns a new upload URL
+       ('/upload', UploadHandler),
+       ('/list_chunks', ListChunksHandler),
        ],
       debug=True)
   wsgiref.handlers.CGIHandler().run(application)
