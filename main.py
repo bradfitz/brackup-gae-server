@@ -336,7 +336,7 @@ class UploadBackupHandler(blobstore_handlers.BlobstoreUploadHandler):
 
     backup = Backup(parent=user,
                     owner=user,
-                    title=None,
+                    title=get_param(self.request, "title"),
                     is_encrypted=(encrypted=="1"),
                     manifest=upload_files[0])
     backup.put()
