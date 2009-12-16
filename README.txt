@@ -1,5 +1,12 @@
 This is an AppEngine server to hold Brackup blobs on Google's infrastructure.
 
+    ************************************************************
+    **   WARNING: in-development!  as of 2009-12-15.          **
+    **                                                        **
+    **   email brad@danga.com if you want to help, but it     **
+    **   it should be done soon, I hope.                      **
+    ************************************************************
+
 I assume first that you're familiar with Brackup:
 
   http://code.google.com/p/brackup/
