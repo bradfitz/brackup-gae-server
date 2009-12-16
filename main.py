@@ -17,11 +17,6 @@
 # limitations under the License.
 #
 
-# Notes:
-#    FooKind.all().order('__key__').filter('_key_ >', 'blah')
-#  where blah is:
-#    db.Key.from_path(FooKind.kind(), 'sha:1111')
-
 import cgi
 import datetime
 import logging
