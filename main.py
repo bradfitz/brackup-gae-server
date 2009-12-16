@@ -131,16 +131,37 @@ class MainHandler(webapp.RequestHandler):
   def get(self):
     # Provide login/logout URLs.
     user_info = get_user_info()
+    is_admin = False
+    has_password = False
+
     if user_info is None:
       login_url = users.create_login_url('/')
     else:
       login_url = users.create_logout_url('/')
+      is_admin = users.is_current_user_admin()
+      has_password = bool(user_info.upload_password)
 
     # Render view.
     self.response.out.write(template.render('main.html', {
         "login_url": login_url,
         "user_info": user_info,
+        "is_admin": is_admin,
+        "has_password": has_password,
         }, debug=True))
+
+
+class ChangePasswordHandler(webapp.RequestHandler):
+
+  def post(self):
+    # Provide login/logout URLs.
+    user_info = get_user_info()
+    if not user_info or not users.is_current_user_admin:
+      self.error(403)
+      return
+
+    user_info.upload_password = self.request.get("password") or ""
+    user_info.put()
+    self.redirect("/");
 
 
 class ListChunksHandler(webapp.RequestHandler):
@@ -301,6 +322,7 @@ class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
 def main():
   application = webapp.WSGIApplication(
       [('/', MainHandler),
+       ('/change_password', ChangePasswordHandler),
        ('/get_upload_urls', GetUploadUrlHandler),
        ('/upload', UploadHandler),
        ('/list_chunks', ListChunksHandler),

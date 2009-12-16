@@ -14,9 +14,37 @@
 
 {% block main_body %}
 
-<h2>Yo.</h2>
+{% if is_admin %}
 
-<p>Maybe some stats here?  Can't actually show data because it's all
-encrypted.  Kick-off a GC operation maybe?</p>
+<h2>Welcome, admin!</h2>
+
+<form method=POST action='/change_password'>
+
+  {% if has_password %}
+
+  <p>Your password is <b>set</b>.</p>
+  <p>Change it to:
+
+    {% else %}
+       <p>Your password is <span style='color: red'><i>not set</i></span>.</p>
+       <p>Set it to:
+   {% endif %}
+
+         <input name='password' type='password' />
+         <input type='submit' value='Save' />
+         </p>
+</form>
+
+<!--
+  Maybe some stats here?  Can't actually show data because it's all
+  encrypted.  Option to kick-off a GC operation maybe?
+-->
+
+{% else %}
+
+<h2>Unauthorized.</h2>
+<p>You're not an admin.</p>
+
+{% endif %}
 
 {% endblock %}

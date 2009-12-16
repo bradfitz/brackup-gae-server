@@ -11,22 +11,27 @@ I assume first that you're familiar with Brackup:
 
   http://code.google.com/p/brackup/
 
-Some instructions:
+To install and use:
 
-* appengine/ is the AppEngine server component.  Go to
-  http://appspot.com/ to make an AppID ("bob-brackup").  Then get the
-  1.3.0 or higher App Engine SDK, tweak
-  brackup-gae-server/app.yaml file to match your AppID, then
-  "appcfg.py update ." to upload the app to your account.
+* Fetch the AppEngine 1.3.0+ SDK from:
+  http://code.google.com/appengine/downloads.html
 
-  -- Now, go to https://<your_appid>.appspot.com/ and login.  This
-     makes your UserInfo entity in the database.  That's all.
+* Go to http://appspot.com/ to make an AppID ("bob-brackup").
 
-  -- Now, go back to http://appspot.com/, click your App, then click
-     "Datastore Viewer" on the left.  Find your UserInfo entity, click
-     it, and modify its "upload_password" to some password you'll use
-     for uploading.  Don't use your Google password.  Choose type
-     "string".
+* modify this project's app.yaml to match your newly-created AppID
 
-  -- Now, configure Brackup::Target::GoogleAppEngine's [target] section
-     config in brackup with your AppId, email, and password.
+* Run:
+  $APPENGINE_SDK/appcfg.py update $BRACKUP_GAE_SERVER_DIR
+
+* Now, go to https://<your_appid>.appspot.com/ and login and set your
+  upload password.  (the app will prompt you to do that.)
+
+* Now, configure your ~/.brackup.conf [target] section with your
+  email, password, and server's URL.  For docs, run:
+  perldoc Brackup::Target::GoogleAppEngine
+
+* Enjoy!
+
+This comes with no warranty of any kind.  I trust you've audited the code.
+
+
