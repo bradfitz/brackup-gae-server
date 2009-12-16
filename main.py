@@ -17,6 +17,11 @@
 # limitations under the License.
 #
 
+# Notes:
+#    FooKind.all().order('__key__').filter('_key_ >', 'blah')
+#  where blah is:
+#    db.Key.from_path(FooKind.kind(), 'sha:1111')
+
 import cgi
 import datetime
 import logging
@@ -41,7 +46,7 @@ import wsgiref.handlers
 class UserInfo(db.Model):
   """Information about a particular user and their media library."""
   user = db.UserProperty(auto_current_user_add=True)
-  upload_password = db.StringProperty()
+  upload_password = db.StringProperty(indexed=False)
 
 
 def get_user_info():
@@ -64,9 +69,9 @@ class Backup(db.Model):
   owner = db.ReferenceProperty(UserInfo, required=True)
 
   creation = db.DateTimeProperty(auto_now_add=True)
-  title = db.StringProperty()
+  title = db.StringProperty(indexed=False)
 
-  is_encryped = db.BooleanProperty();
+  is_encrypted = db.BooleanProperty(indexed=False);
   manifest = blobstore.BlobReferenceProperty();
 
   @property
@@ -92,9 +97,8 @@ class Chunk(db.Model):
   Just dumb bytes to AppEngine.
   """
 
-  # The algorithm, colon, and the lowercase hex digest:
+  # The key is the algorithm, colon, and the lowercase hex digest:
   # "sha1:f1d2d2f924e986ac86fdf7b36c94bcdf32beec15"
-  digest = db.StringProperty()
 
   # The actual bytes.
   blob = blobstore.BlobReferenceProperty()
@@ -218,7 +222,6 @@ class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
     if chunk.blob:
       error_messages.append("Already exists.")
       return
-    chunk.digest = algo_digest
     chunk.blob = blob_info.key()
     chunk.size = size
     chunk.put()
