@@ -253,22 +253,31 @@ class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
       return
 
     # Upload it
-    chunk = Chunk.get_or_insert(key_name=algo_digest)
-    dirty = False
-    if chunk.blob:
+    delete_blob = [False]
+
+    def add_chunk_txn():
+      chunk = Chunk.get_by_key_name(algo_digest)
+      dirty = False
+      if not chunk:
+        dirty = True
+        chunk = Chunk(key_name=algo_digest)
+      if chunk.blob:
+        delete_blob[0] = True
+      else:
+        chunk.blob = blob_info.key()
+        chunk.size = size
+        dirty = True
+
+        # Add owner to this chunk's set of owners.
+        if user_email not in chunk.owners:
+          chunk.owners.append(user_email)
+          dirty = True
+        if dirty:
+          chunk.put()
+    db.run_in_transaction(add_chunk_txn)
+
+    if delete_blob[0]:
       blobstore.delete(blob_info.key())
-    else:
-      chunk.blob = blob_info.key()
-      chunk.size = size
-      dirty = True
-
-    # Add owner to this chunk's set of owners.
-    if user_email not in chunk.owners:
-      chunk.owners.append(user_email)
-      dirty = True
-
-    if dirty:
-      chunk.put()
 
   def post(self):
     """Do upload post."""
