@@ -180,7 +180,7 @@ class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
         error_messages.append(error_message)
         return None
 
-    size = get_param('size')
+    size = int(get_param('size'))
     algo_digest = get_param('algo_digest')
 
     effective_user = None
@@ -207,8 +207,10 @@ class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
 
     blob_info, = upload_files
 
-    if blob_info.size != size:
-      error_messages.append("Declared size doesn't match.")
+    if size != blob_info.size:
+      error_messages.append(
+        "Declared size (%d) doesn't match actual size (%d)." % \
+           (size, blob_info.size))
       return
 
     # Upload it
@@ -229,14 +231,13 @@ class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
 
     self.store_media(upload_files, error_messages)
 
-    error_messages = tuple(urllib.quote(m) for m in error_messages)
-    error_messages = tuple('error_message=%s' % m for m in error_messages)
-    self.redirect('/error?%s' % '&'.join(error_messages))
-
-    # Delete all blobs upon error.
     if error_messages:
       blobstore.delete(upload_files)
+      error_messages = tuple(urllib.quote(m) for m in error_messages)
+      error_messages = tuple('error_message=%s' % m for m in error_messages)
+      self.redirect('/error?%s' % '&'.join(error_messages))
 
+    self.redirect('/success')
 
 def main():
   application = webapp.WSGIApplication(
