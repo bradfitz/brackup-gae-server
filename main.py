@@ -59,6 +59,12 @@ def get_user_info():
     return UserInfo.get_or_insert(key_name='user:%s' % user.email())
 
 
+def get_param(request, key):
+  value = request.get(key)
+  if isinstance(value, cgi.FieldStorage):
+    value = value.value
+  return value
+
 
 def get_authed_user(request):
   """Gets the user from the 'user_email' and 'password' HTTP fields.
@@ -68,13 +74,13 @@ def get_authed_user(request):
   Returns:
     UserInfo for user on success, else None.
   """
-  claimed_email = request.get("user_email")
+  claimed_email = get_param(request, "user_email")
   if not claimed_email:
     return None
   user = UserInfo.get_by_key_name('user:%s' % claimed_email)
   if (user and
       user.upload_password and
-      user.upload_password == request.get("password")):
+      user.upload_password == get_param(request, "password")):
     return user
   return None
 
@@ -85,9 +91,8 @@ class Backup(db.Model):
 
   creation = db.DateTimeProperty(auto_now_add=True)
   title = db.StringProperty(indexed=False)
-
-  is_encrypted = db.BooleanProperty(indexed=False);
-  manifest = blobstore.BlobReferenceProperty();
+  is_encrypted = db.BooleanProperty(indexed=False)
+  manifest = blobstore.BlobReferenceProperty(required=True)
 
   @property
   def display_url(self):
@@ -197,12 +202,18 @@ class GetUploadUrlHandler(webapp.RequestHandler):
       self.error(403)
       return
 
+    url = '/upload'
+    if (self.request.get("for_backup") and
+        int(self.request.get("for_backup")) == 1):
+      url = '/upload_backup'
+
     count = 1
     if self.request.get("count"):
       count = int(self.request.get("count"))
+
     lines = ""
     for x in range(0, count):
-      lines = lines + blobstore.create_upload_url('/upload') + "\n"
+      lines = lines + blobstore.create_upload_url(url) + "\n"
     self.response.headers['Content-Type'] = 'text/plain'
     self.response.out.write(lines)
 
@@ -225,37 +236,27 @@ class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
     if len(upload_files) != 1:
       error_messages.append('Form has more than one file.')
 
-    def get_param(name, error_message=None):
-      """Convenience function to get a parameter from request.
-
-      Returns:
-        String value of field if it exists, else ''.  If the key does not exist
-        at all, it will return None.
-      """
+    def require_param(name, error_message=None):
       try:
         value = self.request.params[name]
         if isinstance(value, cgi.FieldStorage):
           value = value.value
         return value or ''
       except KeyError:
-        error_messages.append(error_message)
+        if error_messages:
+          error_messages.append(error_message)
         return None
 
-    size = int(get_param('size'))
-    algo_digest = get_param('algo_digest')
+    size = int(require_param('size'))
+    algo_digest = require_param('algo_digest')
 
-    effective_user = None
-    user_email = get_param("user_email")
-    if user_email:
-      claimed_user = UserInfo.get_by_key_name('user:%s' % user_email)
-      if (claimed_user and
-          claimed_user.upload_password and
-          claimed_user.upload_password == get_param('password')):
-        effective_user = claimed_user
-      
+    effective_user = get_authed_user(self.request)
     if not effective_user:
       error_messages.append("No user or correct 'password' argument.")
       return
+
+    user_email = get_param(self.request, "user_email")
+    logging.info("user_email type == " + str(type(user_email)))
 
     if not algo_digest.startswith("sha1"):
       error_messages.append("Only sha1 supported for now.")
@@ -319,12 +320,36 @@ class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
     # fetch it:
     self.redirect('/success')
 
+
+class UploadBackupHandler(blobstore_handlers.BlobstoreUploadHandler):
+  """Handle uploads of the manifest file bytes."""
+
+  def post(self):
+    upload_files = self.get_uploads('file')
+    user = get_authed_user(self.request)
+    if not user:
+      self.redirect("/error?error_message=" . urllib.quote(
+          "No user or correct 'password' argument."))
+      return
+
+    encrypted = get_param(self.request, "encrypted")
+
+    backup = Backup(parent=user,
+                    owner=user,
+                    title=None,
+                    is_encrypted=(encrypted=="1"),
+                    manifest=upload_files[0])
+    backup.put()
+    self.redirect("/success")
+
+
 def main():
   application = webapp.WSGIApplication(
       [('/', MainHandler),
        ('/change_password', ChangePasswordHandler),
        ('/get_upload_urls', GetUploadUrlHandler),
-       ('/upload', UploadHandler),
+       ('/upload', UploadHandler),  # uploading chunks
+       ('/upload_backup', UploadBackupHandler),
        ('/list_chunks', ListChunksHandler),
        ],
       debug=True)
