@@ -192,6 +192,28 @@ class ListChunksHandler(webapp.RequestHandler):
         self.response.out.write("%s %d\n" % (chunk.key().name(),
                                              chunk.size))
 
+class GetChunkHandler(blobstore_handlers.BlobstoreDownloadHandler):
+
+  def get(self):
+    algo_digest = self.request.get("digest")
+    user = get_authed_user(self.request)
+    if not user:
+      self.error(403)
+      return
+
+    chunk = Chunk.get_by_key_name(algo_digest)
+    if not chunk:
+      self.error(404)
+      return
+
+    user_email = user.key().name()[5:]  # skip "user:" prefix
+    if user_email not in chunk.owners:
+      logging.info("Denying access to existent but non-owned chunk.")
+      self.error(403)
+      return
+
+    self.send_blob(chunk.blob, "x-danga/brackup-chunk")
+
 
 class GetUploadUrlHandler(webapp.RequestHandler):
   """Handler to return a URL for a script to get an upload URL."""
@@ -256,7 +278,6 @@ class UploadHandler(blobstore_handlers.BlobstoreUploadHandler):
       return
 
     user_email = get_param(self.request, "user_email")
-    logging.info("user_email type == " + str(type(user_email)))
 
     if not algo_digest.startswith("sha1"):
       error_messages.append("Only sha1 supported for now.")
@@ -351,7 +372,8 @@ def main():
        ('/upload', UploadHandler),  # uploading chunks
        ('/upload_backup', UploadBackupHandler),
        ('/list_chunks', ListChunksHandler),
-       ],
+       ('/get_chunk', GetChunkHandler),
+      ],
       debug=True)
   wsgiref.handlers.CGIHandler().run(application)
 
