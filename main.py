@@ -160,7 +160,7 @@ class ChangePasswordHandler(webapp.RequestHandler):
   def post(self):
     # Provide login/logout URLs.
     user_info = get_user_info()
-    if not user_info or not users.is_current_user_admin:
+    if not user_info or not users.is_current_user_admin():
       self.error(403)
       return
 
